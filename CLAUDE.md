@@ -25,7 +25,8 @@ uv run main.py
 ## Architecture
 
 - `build_system_prompt()` — reads `SYSTEM_PROMPT.md`, appends `MAP.md` contents if it exists
-- `complete(history)` — one streaming turn; accumulates tool call chunks, returns `(reply, tool_calls)`
+- `complete(history)` — one streaming turn; accumulates tool call chunks, returns `(reply, tool_calls)`; prints `→ {tool}...` as soon as the first tool-call chunk arrives in the stream
+- `execute_tool(name, arguments)` — dispatches to `TOOL_HANDLERS`
 - `chat()` — outer loop; inner `while True` handles tool → response cycles
 - `TOOL_HANDLERS` dict maps tool names to callables; add new tools here + to `TOOLS` list
 
