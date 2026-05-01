@@ -1,7 +1,4 @@
-import itertools
 import json
-import threading
-import time
 from pathlib import Path
 from openai import OpenAI
 
@@ -59,24 +56,6 @@ def execute_tool(name: str, arguments: str) -> str:
         return f"Tool error: {e}"
 
 
-def run_tool_with_spinner(name: str, arguments: str) -> str:
-    frames = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-    stop = threading.Event()
-
-    def spin():
-        while not stop.is_set():
-            print(f"\r\x1b[2m{next(frames)} {name}...\x1b[0m", end="", flush=True)
-            time.sleep(0.08)
-
-    t = threading.Thread(target=spin, daemon=True)
-    t.start()
-    try:
-        result = execute_tool(name, arguments)
-    finally:
-        stop.set()
-        t.join()
-        print(f"\r\x1b[2K", end="")  # clear spinner line
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -109,11 +88,15 @@ def complete(history: list) -> tuple[str, list]:
 
     reply = ""
     tool_calls_acc: dict[int, dict] = {}
+    announced: set[int] = set()
+    printed_prefix = False
 
-    print("Assistant: ", end="", flush=True)
     for chunk in response:
         delta = chunk.choices[0].delta
         if delta.content:
+            if not printed_prefix:
+                print("Assistant: ", end="", flush=True)
+                printed_prefix = True
             print(delta.content, end="", flush=True)
             reply += delta.content
         if delta.tool_calls:
@@ -123,9 +106,16 @@ def complete(history: list) -> tuple[str, list]:
                     entry["id"] = tc.id
                 if tc.function.name:
                     entry["name"] = tc.function.name
+                    if tc.index not in announced:
+                        announced.add(tc.index)
+                        if printed_prefix:
+                            print()
+                        print(f"  → {tc.function.name}...", flush=True)
                 if tc.function.arguments:
                     entry["arguments"] += tc.function.arguments
-    print()
+
+    if printed_prefix:
+        print()
 
     tool_calls = [
         {"id": v["id"], "type": "function", "function": {"name": v["name"], "arguments": v["arguments"]}}
@@ -163,7 +153,7 @@ def chat():
             history.append({"role": "assistant", "content": reply or None, "tool_calls": tool_calls})
 
             for tc in tool_calls:
-                result = run_tool_with_spinner(tc["function"]["name"], tc["function"]["arguments"])
+                result = execute_tool(tc["function"]["name"], tc["function"]["arguments"])
                 print(f"\x1b[2m[{tc['function']['name']}] {result}\x1b[0m")
                 history.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
