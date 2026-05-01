@@ -1,4 +1,7 @@
+import itertools
 import json
+import threading
+import time
 from pathlib import Path
 from openai import OpenAI
 
@@ -54,6 +57,26 @@ def execute_tool(name: str, arguments: str) -> str:
         return handler(json.loads(arguments))
     except Exception as e:
         return f"Tool error: {e}"
+
+
+def run_tool_with_spinner(name: str, arguments: str) -> str:
+    frames = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+    stop = threading.Event()
+
+    def spin():
+        while not stop.is_set():
+            print(f"\r\x1b[2m{next(frames)} {name}...\x1b[0m", end="", flush=True)
+            time.sleep(0.08)
+
+    t = threading.Thread(target=spin, daemon=True)
+    t.start()
+    try:
+        result = execute_tool(name, arguments)
+    finally:
+        stop.set()
+        t.join()
+        print(f"\r\x1b[2K", end="")  # clear spinner line
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +163,7 @@ def chat():
             history.append({"role": "assistant", "content": reply or None, "tool_calls": tool_calls})
 
             for tc in tool_calls:
-                result = execute_tool(tc["function"]["name"], tc["function"]["arguments"])
+                result = run_tool_with_spinner(tc["function"]["name"], tc["function"]["arguments"])
                 print(f"\x1b[2m[{tc['function']['name']}] {result}\x1b[0m")
                 history.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
