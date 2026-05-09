@@ -6,12 +6,13 @@ Terminal chat harness for a local LLM served by llama-server (llama.cpp).
 
 - Python 3.14, uv for package management
 - `openai` SDK pointed at `http://127.0.0.1:8080/v1` (llama-server's OpenAI-compatible API)
-- Model: Qwen3 — thinking mode disabled via `chat_template_kwargs: {enable_thinking: false}`
+- Model: Qwen3 — thinking mode enabled with budgeted tokens via `thinking_budget_tokens`
 
 ## Run
 
 ```bash
-uv run main.py
+uv run main.py                    # thinking on, output hidden
+uv run main.py --show-thinking    # thinking on, streamed dimmed
 ```
 
 ## Key files
@@ -25,7 +26,7 @@ uv run main.py
 ## Architecture
 
 - `build_system_prompt()` — reads `SYSTEM_PROMPT.md`, appends `MAP.md` contents if it exists
-- `complete(history)` — one streaming turn; accumulates tool call chunks, returns `(reply, tool_calls)`; prints `→ {tool}...` as soon as the first tool-call chunk arrives in the stream
+- `complete(history, show_thinking)` — one streaming turn; accumulates tool call chunks, returns `(reply, tool_calls)`; prints `→ {tool}...` as soon as the first tool-call chunk arrives in the stream; reads `reasoning_content` from stream deltas for thinking output
 - `execute_tool(name, arguments)` — dispatches to `TOOL_HANDLERS`
 - `chat()` — outer loop; inner `while True` handles tool → response cycles
 - `TOOL_HANDLERS` dict maps tool names to callables; add new tools here + to `TOOLS` list
@@ -44,3 +45,4 @@ uv run main.py
 | `SYSTEM_PROMPT_FILE` | `SYSTEM_PROMPT.md` |
 | `MODEL` | `qwen3` |
 | `BASE_URL` | `http://127.0.0.1:8080/v1` |
+| `THINKING_BUDGET` | `4096` |

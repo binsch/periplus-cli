@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 from openai import OpenAI
@@ -6,6 +7,7 @@ MEMORY_FILE = "MAP.md"
 SYSTEM_PROMPT_FILE = "SYSTEM_PROMPT.md"
 MODEL = "qwen3"
 BASE_URL = "http://127.0.0.1:8080/v1"
+THINKING_BUDGET = 4096
 
 client = OpenAI(base_url=BASE_URL, api_key="none")
 
@@ -76,24 +78,38 @@ def build_system_prompt() -> str:
 # Chat loop
 # ---------------------------------------------------------------------------
 
-def complete(history: list) -> tuple[str, list]:
+def complete(history: list, show_thinking: bool = False) -> tuple[str, list]:
     """Stream one completion turn. Returns (reply_text, tool_calls_list)."""
     response = client.chat.completions.create(
         model=MODEL,
         messages=history,
         tools=TOOLS,
         stream=True,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": True},
+            "thinking_budget_tokens": THINKING_BUDGET,
+        },
     )
 
     reply = ""
     tool_calls_acc: dict[int, dict] = {}
     announced: set[int] = set()
     printed_prefix = False
+    in_thinking = False
 
     for chunk in response:
         delta = chunk.choices[0].delta
+        reasoning = getattr(delta, "reasoning_content", None)
+        if reasoning and show_thinking:
+            if not in_thinking:
+                in_thinking = True
+                print("\x1b[2m", end="", flush=True)
+            print(reasoning, end="", flush=True)
         if delta.content:
+            if in_thinking:
+                in_thinking = False
+                if show_thinking:
+                    print("\x1b[0m", end="", flush=True)
             if not printed_prefix:
                 print("Assistant: ", end="", flush=True)
                 printed_prefix = True
@@ -114,6 +130,8 @@ def complete(history: list) -> tuple[str, list]:
                 if tc.function.arguments:
                     entry["arguments"] += tc.function.arguments
 
+    if in_thinking and show_thinking:
+        print("\x1b[0m", end="", flush=True)
     if printed_prefix:
         print()
 
@@ -124,7 +142,7 @@ def complete(history: list) -> tuple[str, list]:
     return reply, tool_calls
 
 
-def chat():
+def chat(show_thinking: bool = False):
     history = [{"role": "system", "content": build_system_prompt()}]
     print(f"Chat with Qwen3 — memories stored in {MEMORY_FILE}  (type 'exit' or Ctrl+C to quit)\n")
 
@@ -144,7 +162,7 @@ def chat():
         history.append({"role": "user", "content": user_input})
 
         while True:
-            reply, tool_calls = complete(history)
+            reply, tool_calls = complete(history, show_thinking)
 
             if not tool_calls:
                 history.append({"role": "assistant", "content": reply})
@@ -159,4 +177,7 @@ def chat():
 
 
 if __name__ == "__main__":
-    chat()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--show-thinking", action="store_true", help="Display model thinking output (dimmed)")
+    args = parser.parse_args()
+    chat(show_thinking=args.show_thinking)
