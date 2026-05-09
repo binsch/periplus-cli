@@ -78,17 +78,17 @@ def build_system_prompt() -> str:
 # Chat loop
 # ---------------------------------------------------------------------------
 
-def complete(history: list, show_thinking: bool = False) -> tuple[str, list]:
+def complete(history: list, show_thinking: bool = False, no_thinking: bool = False) -> tuple[str, list]:
     """Stream one completion turn. Returns (reply_text, tool_calls_list)."""
+    extra_body = {"chat_template_kwargs": {"enable_thinking": not no_thinking}}
+    if not no_thinking:
+        extra_body["thinking_budget_tokens"] = THINKING_BUDGET
     response = client.chat.completions.create(
         model=MODEL,
         messages=history,
         tools=TOOLS,
         stream=True,
-        extra_body={
-            "chat_template_kwargs": {"enable_thinking": True},
-            "thinking_budget_tokens": THINKING_BUDGET,
-        },
+        extra_body=extra_body,
     )
 
     reply = ""
@@ -142,7 +142,7 @@ def complete(history: list, show_thinking: bool = False) -> tuple[str, list]:
     return reply, tool_calls
 
 
-def chat(show_thinking: bool = False):
+def chat(show_thinking: bool = False, no_thinking: bool = False):
     history = [{"role": "system", "content": build_system_prompt()}]
     print(f"Chat with Qwen3 — memories stored in {MEMORY_FILE}  (type 'exit' or Ctrl+C to quit)\n")
 
@@ -162,7 +162,7 @@ def chat(show_thinking: bool = False):
         history.append({"role": "user", "content": user_input})
 
         while True:
-            reply, tool_calls = complete(history, show_thinking)
+            reply, tool_calls = complete(history, show_thinking, no_thinking)
 
             if not tool_calls:
                 history.append({"role": "assistant", "content": reply})
@@ -179,5 +179,6 @@ def chat(show_thinking: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--show-thinking", action="store_true", help="Display model thinking output (dimmed)")
+    parser.add_argument("--no-thinking", action="store_true", help="Disable thinking mode entirely")
     args = parser.parse_args()
-    chat(show_thinking=args.show_thinking)
+    chat(show_thinking=args.show_thinking, no_thinking=args.no_thinking)

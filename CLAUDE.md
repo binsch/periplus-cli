@@ -13,6 +13,7 @@ Terminal chat harness for a local LLM served by llama-server (llama.cpp).
 ```bash
 uv run main.py                    # thinking on, output hidden
 uv run main.py --show-thinking    # thinking on, streamed dimmed
+uv run main.py --no-thinking      # thinking off entirely
 ```
 
 ## Key files
